@@ -15,6 +15,13 @@
       "when": 1784454865852,
       "tag": "0001_iss003_findings",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784456232245,
+      "tag": "0002_audit_truncate_guard",
+      "breakpoints": true
     }
   ]
 }

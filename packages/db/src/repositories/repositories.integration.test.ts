@@ -16,13 +16,12 @@ import {
   recordPublishSuccess,
   recordPublishSuccessOrThrow,
   transitionPostTargetStatus,
-  transitionPostTargetStatusOrThrow,
 } from './post-targets.js';
 import { createUser, createWorkspace } from './workspaces.js';
 import { connections } from '../schema/connections.js';
 import { postTargets } from '../schema/post-targets.js';
 import { auditEvents } from '../schema/audit-events.js';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 // These tests require a live Postgres. Set DATABASE_URL to run them; without
 // it the suite skips rather than silently passing on nothing.
@@ -161,24 +160,12 @@ describeIntegration('repositories against a live database', () => {
 
       // Two workers racing to claim the same target.
       const [first, second] = await Promise.all([
-        transitionPostTargetStatus(db, workspaceId, target.id, 'scheduled', 'publishing'),
-        transitionPostTargetStatus(db, workspaceId, target.id, 'scheduled', 'publishing'),
+        claimPostTargetForPublishing(db, workspaceId, target.id),
+        claimPostTargetForPublishing(db, workspaceId, target.id),
       ]);
 
       expect(first + second).toBe(1);
       expect((await findPostTargetById(db, workspaceId, target.id))?.status).toBe('publishing');
-    });
-
-    it('surfaces the lost race as a typed error in the throwing variant', async () => {
-      const post = await createPost(db, workspaceId, { body: { text: 'race2' } });
-      const target = await createPostTarget(db, workspaceId, { postId: post.id, connectionId });
-      await transitionPostTargetStatus(db, workspaceId, target.id, 'draft', 'scheduled');
-
-      await transitionPostTargetStatusOrThrow(db, workspaceId, target.id, 'scheduled', 'publishing');
-
-      await expect(
-        transitionPostTargetStatusOrThrow(db, workspaceId, target.id, 'scheduled', 'publishing'),
-      ).rejects.toBeInstanceOf(TransitionRaceLostError);
     });
 
     it('holds under higher concurrency: exactly one winner out of ten', async () => {
@@ -187,11 +174,39 @@ describeIntegration('repositories against a live database', () => {
       await transitionPostTargetStatus(db, workspaceId, target.id, 'draft', 'scheduled');
 
       const results = await Promise.all(
-        Array.from({ length: 10 }, () =>
-          transitionPostTargetStatus(db, workspaceId, target.id, 'scheduled', 'publishing'),
-        ),
+        Array.from({ length: 10 }, () => claimPostTargetForPublishing(db, workspaceId, target.id)),
       );
 
+      expect(results.reduce((a, b) => a + b, 0)).toBe(1);
+    });
+
+    // ISS-003-R2-F2: publishing must be entered only through the claim door, so
+    // the lease invariant holds by construction.
+    it('refuses to enter publishing through the generic transition', async () => {
+      const post = await createPost(db, workspaceId, { body: { text: 'nodoor' } });
+      const target = await createPostTarget(db, workspaceId, { postId: post.id, connectionId });
+      await transitionPostTargetStatus(db, workspaceId, target.id, 'draft', 'scheduled');
+
+      await expect(
+        transitionPostTargetStatus(db, workspaceId, target.id, 'scheduled', 'publishing'),
+      ).rejects.toBeInstanceOf(IllegalStatusTransitionError);
+
+      // The row is untouched: still scheduled, no lease stamped.
+      expect((await findPostTargetById(db, workspaceId, target.id))?.status).toBe('scheduled');
+    });
+
+    // The generic transition's race-safety still needs coverage on an edge it is
+    // allowed to take.
+    it('generic transition still yields one winner on a non-publishing edge', async () => {
+      const post = await createPost(db, workspaceId, { body: { text: 'cancelrace' } });
+      const target = await createPostTarget(db, workspaceId, { postId: post.id, connectionId });
+      await transitionPostTargetStatus(db, workspaceId, target.id, 'draft', 'scheduled');
+
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          transitionPostTargetStatus(db, workspaceId, target.id, 'scheduled', 'cancelled'),
+        ),
+      );
       expect(results.reduce((a, b) => a + b, 0)).toBe(1);
     });
   });
@@ -384,6 +399,20 @@ describeIntegration('repositories against a live database', () => {
       const future = new Date(Date.now() + 60_000);
       expect(await reclaimStalePostTarget(db, otherWorkspaceId, id, future)).toBe(0);
     });
+
+    // ISS-003-R2-F2 defense in depth: even a publishing row with no lease (which
+    // the single claim door should make unreachable) must recover, not strand.
+    it('reclaims a publishing target that somehow has a NULL lease', async () => {
+      const id = await scheduledTarget();
+      // Force the pathological state directly, bypassing the claim door.
+      await db
+        .update(postTargets)
+        .set({ status: 'publishing', claimedAt: null, claimExpiresAt: null })
+        .where(eq(postTargets.id, id));
+
+      expect(await reclaimStalePostTarget(db, workspaceId, id)).toBe(1);
+      expect((await findPostTargetById(db, workspaceId, id))?.status).toBe('scheduled');
+    });
   });
 
   // ISS-003-F6: SECURITY.md 2.3 bounds that were previously unenforced.
@@ -488,6 +517,16 @@ describeIntegration('repositories against a live database', () => {
       await expectDatabaseError(
         () => db.delete(auditEvents).where(and(eq(auditEvents.id, id), eq(auditEvents.actor, 'test'))),
         /append-only: DELETE is not permitted/i,
+      );
+    });
+
+    // ISS-003-R2-F1: FOR EACH ROW triggers do not fire on TRUNCATE, which would
+    // otherwise wipe the whole trail. The statement-level guard must reject it.
+    it('rejects TRUNCATE at the database level', async () => {
+      await seedAuditEvent();
+      await expectDatabaseError(
+        () => db.execute(sql`TRUNCATE ${auditEvents}`),
+        /append-only: TRUNCATE is not permitted/i,
       );
     });
   });
