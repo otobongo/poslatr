@@ -16,8 +16,8 @@ export interface PublishJobData {
 export const RETRY_MAX_ATTEMPTS = 5;
 
 // BullMQ 5 forbids ':' in queue names (it namespaces Redis keys with ':'
-// internally). PRD 3.3's "publish:mastodon" is illustrative; the real queue
-// name uses a hyphen.
+// internally). PRD 3.3's colon-delimited example is illustrative; the real
+// queue name uses a hyphen.
 export function queueNameFor(providerId: string): string {
   return `publish-${providerId}`;
 }

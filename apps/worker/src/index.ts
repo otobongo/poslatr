@@ -7,9 +7,9 @@ import { stopPublishWorkers } from './publish-worker.js';
 // The worker process. ISS-007 provides the scheduler machinery (queues,
 // processor, per-provider workers). Wiring concrete providers, the vault, and
 // the media module into PublishDeps and starting a worker per enabled provider
-// is the job of the composition step that lands with the Mastodon provider
-// (ISS-008) and the app boot; here we establish the process lifecycle and a
-// clean SIGTERM drain so that composition has a stable host.
+// is the job of the composition step that lands with the first concrete
+// provider (ISS-008) and the app boot; here we establish the process lifecycle
+// and a clean SIGTERM drain so that composition has a stable host.
 
 const env = loadEnv();
 const connection = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
