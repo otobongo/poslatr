@@ -2,20 +2,22 @@
   "name": "poslatr",
   "version": "0.1.0",
   "private": true,
-  "description": "Self-hosted social media manager. Bootstrap package.json (ISS-001); replaced by the pnpm + Turborepo workspace in ISS-002.",
+  "description": "Self-hosted social media manager.",
   "engines": {
     "node": ">=24"
   },
   "packageManager": "pnpm@10.33.0",
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
-    "test": "node --test",
-    "build": "node -e \"console.log('build ok: no build targets until ISS-002')\""
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "build": "turbo run build",
+    "dev": "turbo run dev"
   },
   "devDependencies": {
-    "@eslint/js": "^9.0.0",
-    "eslint": "^9.0.0",
-    "typescript": "^5.5.0"
+    "@eslint/js": "9.39.5",
+    "eslint": "9.39.5",
+    "turbo": "2.10.5",
+    "typescript": "5.9.3"
   }
 }
