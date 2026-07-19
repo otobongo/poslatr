@@ -2,7 +2,7 @@
 // these classes and nothing else, so mapping discipline in providers is what
 // keeps retries sane.
 //
-// Mapping guidance (PRD ISS-008 codifies it for Mastodon; every provider
+// Mapping guidance (the first concrete provider codifies it; every provider
 // follows the same shape):
 //   RetryableProviderError  429, 5xx, network failures, timeouts. The worker
 //                           retries with exponential backoff + jitter, max 5.

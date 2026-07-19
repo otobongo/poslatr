@@ -27,7 +27,13 @@ export function createBaseConfig(tsconfigRootDir) {
         // underscore is the explicit "unused on purpose" marker.
         '@typescript-eslint/no-unused-vars': [
           'error',
-          { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' },
+          {
+            argsIgnorePattern: '^_',
+            varsIgnorePattern: '^_',
+            // Keep unused-catch detection on; opt out per-binding with `_`
+            // (ISS-005-F4) rather than disabling it wholesale.
+            caughtErrorsIgnorePattern: '^_',
+          },
         ],
       },
     },

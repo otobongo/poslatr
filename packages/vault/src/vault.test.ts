@@ -104,6 +104,39 @@ describeIntegration('vault against a live database', () => {
     ).rejects.toMatchObject({ name: 'VaultNotFoundError' });
   });
 
+  it('reveal() returns a clone, not the live internal reference (ISS-004-F2)', async () => {
+    const { credentialId } = await encryptCredentials(
+      handle.db,
+      workspaceId,
+      { nested: { token: 'orig' } },
+      config,
+    );
+    const decrypted = await decryptCredentials(handle.db, workspaceId, credentialId, config);
+
+    const first = decrypted.reveal() as { nested: { token: string } };
+    first.nested.token = 'mutated';
+    const second = decrypted.reveal() as { nested: { token: string } };
+    expect(second.nested.token).toBe('orig');
+  });
+
+  it('fails closed when the stored row is newer than the loaded key (ISS-004-F1)', async () => {
+    // Encrypt under version 2, then ask to decrypt with a config on version 1
+    // that offers a previous key. The row is NEWER than our config, so we must
+    // refuse rather than blindly try the previous key.
+    const { credentialId } = await encryptCredentials(handle.db, workspaceId, { t: 'newer' }, {
+      masterKey: keyB,
+      keyVersion: 2,
+    });
+
+    await expect(
+      decryptCredentials(handle.db, workspaceId, credentialId, {
+        masterKey: keyA,
+        keyVersion: 1,
+        previousMasterKey: keyA,
+      }),
+    ).rejects.toMatchObject({ name: 'VaultKeyVersionError' });
+  });
+
   it('JSON.stringify on decrypted credentials throws (test case 4)', async () => {
     const { credentialId } = await encryptCredentials(handle.db, workspaceId, { s: 1 }, config);
     const decrypted = await decryptCredentials(handle.db, workspaceId, credentialId, config);

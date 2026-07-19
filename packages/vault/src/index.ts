@@ -71,10 +71,13 @@ export async function decryptCredentials(
   let key: string;
   if (row.keyVersion === config.keyVersion) {
     key = config.masterKey;
-  } else if (config.previousMasterKey !== undefined) {
-    // Row predates the current key (rotation in progress). Wrong-key attempts
-    // fail authentication identically to tampering, so this cannot decrypt
-    // with a key it should not.
+  } else if (row.keyVersion < config.keyVersion && config.previousMasterKey !== undefined) {
+    // Row predates the current key (rotation in progress). Only OLDER rows may
+    // fall back to the previous key; a row whose version is NEWER than the one
+    // we hold means our config is stale, so fail closed rather than blindly try
+    // the previous key (ISS-004-F1). Wrong-key attempts would fail auth
+    // anyway, but this makes the intent explicit and refuses the ambiguous
+    // case up front.
     key = config.previousMasterKey;
   } else {
     throw new VaultKeyVersionError(row.keyVersion, config.keyVersion);
