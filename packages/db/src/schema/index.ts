@@ -2,6 +2,7 @@ export * from './enums.js';
 export * from './workspaces.js';
 export * from './users.js';
 export * from './connections.js';
+export * from './credentials.js';
 export * from './media-assets.js';
 export * from './posts.js';
 export * from './post-targets.js';

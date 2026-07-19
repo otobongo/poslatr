@@ -58,3 +58,14 @@ export {
   createWorkspaceInput,
   findWorkspaceForSession,
 } from './repositories/workspaces.js';
+
+export {
+  deleteEncryptedCredential,
+  encryptedRecordInput,
+  findEncryptedCredential,
+  insertEncryptedCredential,
+  listCredentialsNotOnVersion,
+  replaceEncryptedCredential,
+  type EncryptedRecord,
+  type EncryptedRecordInput,
+} from './repositories/credentials.js';

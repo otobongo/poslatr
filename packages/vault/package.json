@@ -12,8 +12,15 @@
   },
   "devDependencies": {
     "@poslatr/config": "workspace:*",
+    "@types/libsodium-wrappers": "0.8.2",
+    "@types/node": "26.1.1",
+    "drizzle-orm": "0.45.2",
     "typescript": "5.9.3",
-    "vitest": "4.1.10",
-    "@types/node": "26.1.1"
+    "vitest": "4.1.10"
+  },
+  "dependencies": {
+    "@poslatr/core": "workspace:*",
+    "@poslatr/db": "workspace:*",
+    "libsodium-wrappers": "0.8.4"
   }
 }

@@ -1,4 +1,13 @@
 import { z } from 'zod';
+import { isValidVaultMasterKey } from './vault-key.js';
+
+const vaultKey = z
+  .string()
+  .refine(isValidVaultMasterKey, {
+    // Never echo the offending value: this message may reach logs.
+    message:
+      'must be base64 for exactly 32 high-entropy bytes; generate with: openssl rand -base64 32',
+  });
 
 const envSchema = z.object({
   DATABASE_URL: z.url(),
@@ -12,6 +21,11 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+  VAULT_MASTER_KEY: vaultKey,
+  // The version tag written on new encryptions. Bumped when rotating.
+  VAULT_KEY_VERSION: z.coerce.number().int().min(1).default(1),
+  // Set only while a rotation is in progress, then removed.
+  VAULT_MASTER_KEY_PREVIOUS: vaultKey.optional(),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 });
 
