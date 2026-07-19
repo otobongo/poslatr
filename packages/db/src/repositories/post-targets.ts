@@ -1,7 +1,7 @@
-import { and, eq, lt, sql } from 'drizzle-orm';
+import { and, eq, isNull, lt, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Executor } from '../client.js';
-import { NotFoundError, TransitionRaceLostError } from '../errors.js';
+import { IllegalStatusTransitionError, NotFoundError, TransitionRaceLostError } from '../errors.js';
 import { connections } from '../schema/connections.js';
 import { postTargets } from '../schema/post-targets.js';
 import { posts } from '../schema/posts.js';
@@ -81,9 +81,18 @@ export async function findPostTargetById(
 }
 
 /**
- * The claim operation ISS-007's worker depends on. Exactly one concurrent
- * caller can move a target scheduled -> publishing; every other caller gets 0
- * and must exit cleanly (PRD 3.3 item 2).
+ * General conditional status transition for post targets. The WHERE pins the
+ * expected current status, so a losing concurrent caller updates zero rows
+ * (PRD 3.3 item 2).
+ *
+ * Moving a target INTO `publishing` is deliberately NOT allowed here
+ * (ISS-003-R2-F2): `publishing` must be entered only through
+ * claimPostTargetForPublishing, which stamps a lease. If it could also be
+ * reached through this door with no lease, a worker that then died would leave
+ * a NULL-lease `publishing` row that the reclaim sweeper can never recover,
+ * silently re-opening the ISS-003-F3 stranding hazard. Routing every claim
+ * through one door keeps the invariant "every `publishing` row carries a lease"
+ * true by construction.
  */
 export async function transitionPostTargetStatus(
   db: Executor,
@@ -93,6 +102,13 @@ export async function transitionPostTargetStatus(
   to: PostTargetStatus,
 ): Promise<number> {
   assertLegalPostTargetTransition(from, to);
+  if (to === 'publishing') {
+    throw new IllegalStatusTransitionError(
+      'post target',
+      from,
+      'publishing (use claimPostTargetForPublishing)',
+    );
+  }
 
   const updated = await db
     .update(postTargets)
@@ -164,13 +180,27 @@ export async function claimPostTargetForPublishing(
   return updated.length;
 }
 
+// A publishing target is reclaimable when its lease has expired. A NULL lease
+// is also treated as reclaimable (ISS-003-R2-F2 defense in depth): the single
+// claim door means a NULL-lease publishing row should be unreachable, but if
+// one ever appears it must recover, not strand.
+function reclaimablePredicate(now: Date) {
+  return and(
+    eq(postTargets.status, 'publishing'),
+    or(isNull(postTargets.claimExpiresAt), lt(postTargets.claimExpiresAt, now)),
+  );
+}
+
 /**
- * Returns a target whose publishing claim has expired to `scheduled` so it can
- * be picked up again (ISS-003-F3).
+ * Returns a target whose publishing claim has expired (or is unset) to
+ * `scheduled` so it can be picked up again (ISS-003-F3).
  *
- * The expired-lease predicate is the whole safety story: a target being
- * actively published has a future claim_expires_at and cannot be reclaimed, so
- * this can never yank work away from a live worker or cause a double publish.
+ * Safety: a target being actively published has a future claim_expires_at and
+ * is not matched here, so reclaim never yanks work from a live worker and the
+ * DB layer never double-*records* success. It does NOT prevent a duplicate
+ * *provider* publish after a lease genuinely expires mid-flight
+ * (ISS-003-R2-F3): guarding against that is ISS-007's job, via a pre-network
+ * lease re-check and/or a provider idempotency key (SECURITY.md 2.22).
  */
 export async function reclaimStalePostTarget(
   db: Executor,
@@ -180,13 +210,12 @@ export async function reclaimStalePostTarget(
 ): Promise<number> {
   const updated = await db
     .update(postTargets)
-    .set({ status: 'scheduled', claimedAt: null, claimExpiresAt: null, updatedAt: new Date() })
+    .set({ status: 'scheduled', claimedAt: null, claimExpiresAt: null, updatedAt: now })
     .where(
       and(
         eq(postTargets.id, id),
         eq(postTargets.workspaceId, workspaceId),
-        eq(postTargets.status, 'publishing'),
-        lt(postTargets.claimExpiresAt, now),
+        reclaimablePredicate(now),
       ),
     )
     .returning({ id: postTargets.id });
@@ -205,14 +234,8 @@ export async function reclaimAllStalePostTargets(
 ): Promise<string[]> {
   const updated = await db
     .update(postTargets)
-    .set({ status: 'scheduled', claimedAt: null, claimExpiresAt: null, updatedAt: new Date() })
-    .where(
-      and(
-        eq(postTargets.workspaceId, workspaceId),
-        eq(postTargets.status, 'publishing'),
-        lt(postTargets.claimExpiresAt, now),
-      ),
-    )
+    .set({ status: 'scheduled', claimedAt: null, claimExpiresAt: null, updatedAt: now })
+    .where(and(eq(postTargets.workspaceId, workspaceId), reclaimablePredicate(now)))
     .returning({ id: postTargets.id });
 
   return updated.map((row) => row.id);
