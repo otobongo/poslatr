@@ -1,4 +1,11 @@
-export { connect, type Database, type DatabaseHandle } from './client.js';
+export {
+  connect,
+  withTransaction,
+  type Database,
+  type DatabaseHandle,
+  type Executor,
+  type Transaction,
+} from './client.js';
 export {
   IllegalStatusTransitionError,
   NotFoundError,
@@ -21,17 +28,24 @@ export {
   createPost,
   createPostInput,
   findPostById,
+  isValidIanaTimezone,
+  MAX_POST_BODY_BYTES,
   transitionPostStatus,
   transitionPostStatusOrThrow,
   type CreatePostInput,
 } from './repositories/posts.js';
 
 export {
+  claimPostTargetForPublishing,
   createPostTarget,
   createPostTargetInput,
+  DEFAULT_CLAIM_LEASE_MS,
   findPostTargetById,
   incrementAttemptCount,
+  reclaimAllStalePostTargets,
+  reclaimStalePostTarget,
   recordPublishSuccess,
+  recordPublishSuccessOrThrow,
   transitionPostTargetStatus,
   transitionPostTargetStatusOrThrow,
   type CreatePostTargetInput,
@@ -42,5 +56,5 @@ export {
   createUserInput,
   createWorkspace,
   createWorkspaceInput,
-  findWorkspaceById,
+  findWorkspaceForSession,
 } from './repositories/workspaces.js';

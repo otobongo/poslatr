@@ -14,7 +14,10 @@ import {
 const EXPECTED_LEGAL: Readonly<Record<PostStatus, readonly PostStatus[]>> = {
   draft: ['scheduled', 'cancelled'],
   scheduled: ['publishing', 'cancelled', 'draft'],
-  publishing: ['published', 'failed'],
+  // publishing -> scheduled is the ISS-003-F3 stale-claim recovery edge. It is
+  // legal in the graph but reachable only through reclaimStalePostTarget(),
+  // which additionally requires an expired lease.
+  publishing: ['published', 'failed', 'scheduled'],
   published: [],
   failed: ['scheduled'],
   cancelled: [],
@@ -48,8 +51,17 @@ describe('post status transition graph', () => {
     );
   });
 
-  it('rejects reversing publishing back to scheduled', () => {
-    expect(() => assertLegalPostTransition('publishing', 'scheduled')).toThrow(
+  it('permits publishing -> scheduled only as the stale-claim recovery edge', () => {
+    // Legal in the graph (ISS-003-F3), but the repository gates it behind an
+    // expired lease, which repositories.integration.test.ts asserts.
+    expect(isLegalPostTransition('publishing', 'scheduled')).toBe(true);
+  });
+
+  it('still refuses to reverse publishing into draft or cancelled', () => {
+    expect(() => assertLegalPostTransition('publishing', 'draft')).toThrow(
+      IllegalStatusTransitionError,
+    );
+    expect(() => assertLegalPostTransition('publishing', 'cancelled')).toThrow(
       IllegalStatusTransitionError,
     );
   });
