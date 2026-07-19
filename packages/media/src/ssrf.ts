@@ -69,21 +69,88 @@ export function isBlockedAddress(address: string): boolean {
   }
 
   if (kind === 6) {
-    const normalized = address.toLowerCase();
-    // Map IPv4-mapped / -compatible IPv6 back to the v4 check.
-    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(normalized);
-    if (mapped?.[1]) return isBlockedAddress(mapped[1]);
-    return (
-      normalized === '::1' || // loopback
-      normalized === '::' ||
-      normalized.startsWith('fe80:') || // link-local
-      normalized.startsWith('fc') || // unique-local fc00::/7
-      normalized.startsWith('fd') ||
-      normalized.startsWith('ff') // multicast
-    );
+    const bytes = expandIpv6(address);
+    if (bytes === null) return true; // valid per isIP but unexpandable => unsafe
+
+    // Loopback ::1 and unspecified :: are blocked outright (handle first so the
+    // v4-compatible check below can't misclassify them).
+    if (bytes.slice(0, 15).every((b) => b === 0) && bytes[15] === 1) return true;
+    if (bytes.every((b) => b === 0)) return true;
+
+    // Any IPv6 that embeds an IPv4 address must be checked as that IPv4,
+    // regardless of textual notation (ISS-006-F1). Node's URL parser rewrites
+    // ::ffff:127.0.0.1 into compressed hex (::ffff:7f00:1), so a text regex on
+    // the dotted form is dead code on this path; inspect the bytes instead.
+    const firstTenZero = bytes.slice(0, 10).every((b) => b === 0);
+    const v4Mapped = firstTenZero && bytes[10] === 0xff && bytes[11] === 0xff;
+    const v4Compatible = bytes.slice(0, 12).every((b) => b === 0); // ::a.b.c.d (deprecated)
+    const nat64 = bytes[0] === 0x00 && bytes[1] === 0x64 && bytes[2] === 0xff && bytes[3] === 0x9b;
+
+    if (v4Mapped || v4Compatible || nat64) {
+      return isBlockedAddress(`${bytes[12]}.${bytes[13]}.${bytes[14]}.${bytes[15]}`);
+    }
+
+    const b0 = bytes[0] ?? 0;
+    const b1 = bytes[1] ?? 0;
+    if (b0 === 0xfe && (b1 & 0xc0) === 0x80) return true; // fe80::/10 link-local
+    if ((b0 & 0xfe) === 0xfc) return true; // fc00::/7 unique-local
+    if (b0 === 0xff) return true; // ff00::/8 multicast
+    return false;
   }
 
   return true; // not a valid IP literal => unsafe
+}
+
+/**
+ * Expands any valid IPv6 literal (with :: compression and/or an embedded dotted
+ * IPv4 tail) into its 16 bytes. Returns null if it cannot be parsed.
+ */
+export function expandIpv6(address: string): number[] | null {
+  let text = address.toLowerCase();
+
+  // A trailing dotted-IPv4 (e.g. ::ffff:127.0.0.1) becomes two hextets.
+  const v4Match = /(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(text);
+  if (v4Match) {
+    const octets = v4Match.slice(1, 5).map(Number);
+    if (octets.some((o) => o > 255)) return null;
+    const [a, b, c, d] = octets;
+    const hi = (a << 8) | b;
+    const lo = (c << 8) | d;
+    text = text.slice(0, v4Match.index) + hi.toString(16) + ':' + lo.toString(16);
+  }
+
+  const halves = text.split('::');
+  if (halves.length > 2) return null;
+
+  const parseGroups = (part: string): number[] | null => {
+    if (part === '') return [];
+    const groups: number[] = [];
+    for (const g of part.split(':')) {
+      if (!/^[0-9a-f]{1,4}$/.test(g)) return null;
+      groups.push(parseInt(g, 16));
+    }
+    return groups;
+  };
+
+  const head = parseGroups(halves[0] ?? '');
+  const tail = halves.length === 2 ? parseGroups(halves[1] ?? '') : [];
+  if (head === null || tail === null) return null;
+
+  let words: number[];
+  if (halves.length === 2) {
+    const missing = 8 - head.length - tail.length;
+    if (missing < 0) return null;
+    words = [...head, ...Array<number>(missing).fill(0), ...tail];
+  } else {
+    words = head;
+  }
+  if (words.length !== 8) return null;
+
+  const bytes: number[] = [];
+  for (const w of words) {
+    bytes.push((w >> 8) & 0xff, w & 0xff);
+  }
+  return bytes;
 }
 
 export interface SsrfCheckOptions {
