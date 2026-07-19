@@ -4,5 +4,10 @@ packages:
 
 # GHSA-qx2v-qp2m-jg93: next@16.2.10 pins postcss@8.4.31, which has a moderate
 # XSS advisory. Force the already-present patched version everywhere.
+#
+# GHSA-67mh-4wv8-2f99: drizzle-kit depends on the deprecated @esbuild-kit
+# chain, which pins esbuild <=0.24.2 (dev-server request leak). Dev-only, but
+# a patched version exists, so pin it rather than carry a known advisory.
 overrides:
   postcss: ">=8.5.10"
+  esbuild: ">=0.25.0"
