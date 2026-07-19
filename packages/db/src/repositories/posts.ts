@@ -1,22 +1,62 @@
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
-import type { Database } from '../client.js';
+import type { Executor } from '../client.js';
 import { TransitionRaceLostError } from '../errors.js';
 import { posts } from '../schema/posts.js';
 import { assertLegalPostTransition, type PostStatus } from './transitions.js';
 
+// Hard global ceiling on serialized post body size (SECURITY.md 2.3), applied
+// independently of any provider's declared character limit.
+export const MAX_POST_BODY_BYTES = 256 * 1024;
+
+// Validates against the runtime's IANA database rather than a hardcoded list.
+// Note Intl.supportedValuesOf('timeZone') omits "UTC", so constructing a
+// formatter is the check that accepts every genuinely valid zone.
+export function isValidIanaTimezone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const postBody = z.unknown().refine(
+  (value) => {
+    if (value === undefined) return false;
+    try {
+      return new TextEncoder().encode(JSON.stringify(value) ?? '').length <= MAX_POST_BODY_BYTES;
+    } catch {
+      // Circular structures and similar are not storable as jsonb.
+      return false;
+    }
+  },
+  { message: `body must be JSON-serializable and at most ${MAX_POST_BODY_BYTES} bytes` },
+);
+
 // Whitelist of client-writable fields. Status, workspaceId, and timestamps are
 // server-controlled and deliberately absent (SECURITY.md 2.7, mass assignment).
 export const createPostInput = z.object({
-  body: z.unknown(),
-  scheduledAt: z.date().nullable().optional(),
-  timezone: z.string().min(1).max(64).nullable().optional(),
+  body: postBody,
+  // SECURITY.md 2.3: scheduled_at must be in the future at schedule time.
+  scheduledAt: z
+    .date()
+    .refine((d) => d.getTime() > Date.now(), { message: 'scheduledAt must be in the future' })
+    .nullable()
+    .optional(),
+  timezone: z
+    .string()
+    .min(1)
+    .max(64)
+    .refine(isValidIanaTimezone, { message: 'timezone must be a valid IANA identifier' })
+    .nullable()
+    .optional(),
 });
 
 export type CreatePostInput = z.infer<typeof createPostInput>;
 
 export async function createPost(
-  db: Database,
+  db: Executor,
   workspaceId: string,
   input: CreatePostInput,
 ): Promise<{ id: string; status: PostStatus }> {
@@ -38,7 +78,7 @@ export async function createPost(
 }
 
 export async function findPostById(
-  db: Database,
+  db: Executor,
   workspaceId: string,
   id: string,
 ): Promise<{ id: string; status: PostStatus } | null> {
@@ -61,7 +101,7 @@ export async function findPostById(
  * Illegal transitions throw before touching the database.
  */
 export async function transitionPostStatus(
-  db: Database,
+  db: Executor,
   workspaceId: string,
   id: string,
   from: PostStatus,
@@ -84,7 +124,7 @@ export async function transitionPostStatus(
  * exceptional rather than expected.
  */
 export async function transitionPostStatusOrThrow(
-  db: Database,
+  db: Executor,
   workspaceId: string,
   id: string,
   from: PostStatus,

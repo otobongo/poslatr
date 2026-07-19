@@ -1,4 +1,4 @@
-import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { connectionHealthEnum } from './enums.js';
 import { workspaces } from './workspaces.js';
 
@@ -22,5 +22,8 @@ export const connections = pgTable(
   (table) => [
     index('psl_connections_workspace_id_created_at_idx').on(table.workspaceId, table.createdAt),
     index('psl_connections_health_idx').on(table.health),
+    // Target of the composite FK on psl_post_targets, so a target can never
+    // reference a connection from another workspace (ISS-003-F1).
+    uniqueIndex('psl_connections_id_workspace_id_key').on(table.id, table.workspaceId),
   ],
 );

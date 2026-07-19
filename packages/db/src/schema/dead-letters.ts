@@ -1,4 +1,13 @@
-import { index, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  foreignKey,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { postTargets } from './post-targets.js';
 import { workspaces } from './workspaces.js';
 
@@ -12,9 +21,9 @@ export const deadLetters = pgTable(
     workspaceId: uuid('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'restrict' }),
-    postTargetId: uuid('post_target_id')
-      .notNull()
-      .references(() => postTargets.id, { onDelete: 'cascade' }),
+    // Reached via the composite FK below so a dead letter cannot reference a
+    // post target from another workspace (ISS-003-F1).
+    postTargetId: uuid('post_target_id').notNull(),
     providerId: text('provider_id').notNull(),
     errorClass: text('error_class').notNull(),
     errorDetail: jsonb('error_detail').notNull().default({}),
@@ -25,5 +34,10 @@ export const deadLetters = pgTable(
   (table) => [
     index('psl_dead_letters_workspace_id_created_at_idx').on(table.workspaceId, table.createdAt),
     index('psl_dead_letters_post_target_id_idx').on(table.postTargetId),
+    foreignKey({
+      name: 'psl_dead_letters_post_target_workspace_fk',
+      columns: [table.postTargetId, table.workspaceId],
+      foreignColumns: [postTargets.id, postTargets.workspaceId],
+    }).onDelete('cascade'),
   ],
 );

@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import type { Database } from '../client.js';
+import type { Executor } from '../client.js';
 import { users } from '../schema/users.js';
 import { workspaces } from '../schema/workspaces.js';
 
@@ -9,7 +9,7 @@ export const createWorkspaceInput = z.object({
 });
 
 export async function createWorkspace(
-  db: Database,
+  db: Executor,
   input: z.infer<typeof createWorkspaceInput>,
 ): Promise<{ id: string; name: string }> {
   const parsed = createWorkspaceInput.parse(input);
@@ -24,14 +24,22 @@ export async function createWorkspace(
   return row;
 }
 
-export async function findWorkspaceById(
-  db: Database,
-  id: string,
+/**
+ * Loads the session's own workspace.
+ *
+ * ISS-003-F2: this was previously findWorkspaceById(db, id), which let any
+ * caller holding an arbitrary UUID read that workspace. Taking exactly one id,
+ * always the session's, makes that misuse unrepresentable rather than merely
+ * discouraged (SECURITY.md 2.6).
+ */
+export async function findWorkspaceForSession(
+  db: Executor,
+  sessionWorkspaceId: string,
 ): Promise<{ id: string; name: string } | null> {
   const [row] = await db
     .select({ id: workspaces.id, name: workspaces.name })
     .from(workspaces)
-    .where(eq(workspaces.id, id))
+    .where(eq(workspaces.id, sessionWorkspaceId))
     .limit(1);
 
   return row ?? null;
@@ -46,7 +54,7 @@ export const createUserInput = z.object({
 });
 
 export async function createUser(
-  db: Database,
+  db: Executor,
   workspaceId: string,
   input: z.infer<typeof createUserInput>,
 ): Promise<{ id: string; email: string }> {
