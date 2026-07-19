@@ -11,6 +11,28 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+
+    # Postgres 16 per PRD section 2. The db integration tests (claim race,
+    # workspace scoping) skip without DATABASE_URL, so CI must provide one or
+    # they silently cover nothing.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: poslatr
+          POSTGRES_PASSWORD: poslatr
+          POSTGRES_DB: poslatr
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U poslatr -d poslatr"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://poslatr:poslatr@localhost:5432/poslatr
+
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
@@ -30,6 +52,9 @@ jobs:
 
       - name: Lint
         run: pnpm lint
+
+      - name: Migrate database
+        run: pnpm --filter @poslatr/db db:migrate
 
       - name: Test
         run: pnpm test

@@ -6,7 +6,10 @@
     },
     "lint": {},
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      // Turborepo filters env vars by default. Without this, DATABASE_URL never
+      // reaches vitest and the db integration tests silently skip.
+      "env": ["DATABASE_URL"]
     },
     "build": {
       "dependsOn": ["^build"],

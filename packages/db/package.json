@@ -8,12 +8,22 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/migrate.ts",
+    "db:seed": "tsx src/seed.ts"
   },
   "devDependencies": {
     "@poslatr/config": "workspace:*",
+    "@types/node": "26.1.1",
+    "drizzle-kit": "0.31.10",
+    "tsx": "4.23.1",
     "typescript": "5.9.3",
-    "vitest": "4.1.10",
-    "@types/node": "26.1.1"
+    "vitest": "4.1.10"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.2",
+    "postgres": "3.4.9",
+    "zod": "4.4.3"
   }
 }
