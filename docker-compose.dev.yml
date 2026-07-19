@@ -48,11 +48,14 @@ services:
       retries: 10
 
   minio-bootstrap:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     depends_on:
       minio:
         condition: service_healthy
-    entrypoint: >
+    # minio/mc's default entrypoint is `mc` itself; override to a shell so the
+    # chained alias/mb/anonymous commands below can run as a single command.
+    entrypoint: [""]
+    command: >
       /bin/sh -c "
       mc alias set poslatr-minio http://minio:9000 poslatr-dev poslatr-dev-secret-change-me &&
       mc mb --ignore-existing poslatr-minio/poslatr-media &&
