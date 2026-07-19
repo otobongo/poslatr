@@ -69,3 +69,13 @@ export {
   type EncryptedRecord,
   type EncryptedRecordInput,
 } from './repositories/credentials.js';
+
+export {
+  createMediaAssetInput,
+  findMediaAssetByChecksum,
+  findMediaAssetById,
+  insertOrGetMediaAsset,
+  setRenditions,
+  type CreateMediaAssetInput,
+  type MediaAssetRow,
+} from './repositories/media-assets.js';
