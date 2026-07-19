@@ -30,6 +30,29 @@ describe('isBlockedAddress', () => {
     },
   );
 
+  // ISS-006-F1: Node's URL parser rewrites ::ffff:127.0.0.1 into compressed hex,
+  // which the old dotted-decimal regex missed entirely. Every embedded-v4 form
+  // and notation must resolve to the underlying v4 check.
+  it.each([
+    '::ffff:7f00:1', // 127.0.0.1, hex (what URL produces)
+    '::ffff:127.0.0.1', // 127.0.0.1, dotted
+    '::ffff:a9fe:a9fe', // 169.254.169.254 cloud metadata, hex
+    '::ffff:169.254.169.254', // same, dotted
+    '::ffff:0a00:0001', // 10.0.0.1
+    '::ffff:c0a8:0001', // 192.168.0.1
+    '0:0:0:0:0:ffff:127.0.0.1', // uncompressed v4-mapped
+    '::7f00:1', // ::127.0.0.1 v4-compatible (deprecated)
+    '64:ff9b::7f00:1', // NAT64-embedded 127.0.0.1
+    '64:ff9b::a9fe:a9fe', // NAT64-embedded metadata
+  ])('blocks embedded-v4 form %s', (addr) => {
+    expect(isBlockedAddress(addr)).toBe(true);
+  });
+
+  it('still allows an embedded PUBLIC v4 mapped into IPv6', () => {
+    expect(isBlockedAddress('::ffff:8.8.8.8')).toBe(false);
+    expect(isBlockedAddress('::ffff:0808:0808')).toBe(false);
+  });
+
   it('blocks the boundary just inside 172.16/12 and allows just outside', () => {
     expect(isBlockedAddress('172.15.255.255')).toBe(false);
     expect(isBlockedAddress('172.16.0.0')).toBe(true);
@@ -70,6 +93,16 @@ describe('assertUrlSafe', () => {
     await expect(assertUrlSafe('http://169.254.169.254/')).rejects.toBeInstanceOf(
       SsrfBlockedError,
     );
+  });
+
+  // ISS-006-F1 end to end: the exact bracketed URLs the review exploited.
+  it.each([
+    'http://[::ffff:7f00:1]/', // loopback
+    'http://[::ffff:a9fe:a9fe]/latest/meta-data/', // AWS metadata
+    'http://[::ffff:0a00:0001]/', // 10.0.0.1
+    'http://[0:0:0:0:0:ffff:127.0.0.1]/', // uncompressed
+  ])('blocks v4-mapped IPv6 literal URL %s', async (url) => {
+    await expect(assertUrlSafe(url)).rejects.toBeInstanceOf(SsrfBlockedError);
   });
 
   it('blocks metadata.google.internal by name', async () => {

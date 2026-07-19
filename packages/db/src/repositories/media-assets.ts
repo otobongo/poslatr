@@ -107,6 +107,11 @@ export async function insertOrGetMediaAsset(
     return { asset: existing, deduplicated: true };
   }
 
+  // No explicit conflict target (ISS-006-F2): the table has two unique indexes,
+  // (workspace_id, checksum) and storage_key. Targeting only the former would
+  // let a storage_key collision raise instead of dedupe. onConflictDoNothing
+  // with no target suppresses ANY unique violation, and the checksum re-lookup
+  // below resolves the winner for the dedupe case.
   const inserted = await db
     .insert(mediaAssets)
     .values({
@@ -120,19 +125,23 @@ export async function insertOrGetMediaAsset(
       checksum: parsed.checksum,
       originalFilename: parsed.originalFilename ?? null,
     })
-    .onConflictDoNothing({
-      target: [mediaAssets.workspaceId, mediaAssets.checksum],
-    })
+    .onConflictDoNothing()
     .returning(SELECTION);
 
   if (inserted[0]) {
     return { asset: toRow(inserted[0]), deduplicated: false };
   }
 
-  // Lost an insert race: another transaction wrote the same checksum first.
+  // Conflict suppressed. The dedupe case is a checksum collision, so resolve
+  // the existing row by checksum.
   const winner = await findMediaAssetByChecksum(db, workspaceId, parsed.checksum);
   if (!winner) {
-    throw new Error('media asset insert conflicted but no row was found');
+    // A storage_key collision with a DIFFERENT checksum landed here: distinct
+    // content that happened to draw a colliding server-generated key (astronomic
+    // with UUIDs). Surface it rather than silently returning the wrong asset.
+    throw new Error(
+      'media asset insert conflicted on storage_key with different content; retry with a new key',
+    );
   }
   return { asset: winner, deduplicated: true };
 }
