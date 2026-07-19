@@ -7,9 +7,18 @@
     "lint": {},
     "test": {
       "dependsOn": ["^build"],
-      // Turborepo filters env vars by default. Without this, DATABASE_URL never
-      // reaches vitest and the db integration tests silently skip.
-      "env": ["DATABASE_URL"]
+      // Turborepo filters env vars by default. Without listing them here they
+      // never reach vitest and the gated integration tests silently skip, which
+      // is exactly how a skipped-not-run suite masquerades as passing.
+      "env": [
+        "DATABASE_URL",
+        "MINIO_TEST_ENDPOINT",
+        "MINIO_TEST_PORT",
+        "MINIO_TEST_SSL",
+        "MINIO_TEST_ACCESS_KEY",
+        "MINIO_TEST_SECRET_KEY",
+        "MINIO_TEST_BUCKET"
+      ]
     },
     "build": {
       "dependsOn": ["^build"],

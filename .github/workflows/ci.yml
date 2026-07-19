@@ -32,6 +32,11 @@ jobs:
 
     env:
       DATABASE_URL: postgres://poslatr:poslatr@localhost:5432/poslatr
+      MINIO_TEST_ENDPOINT: localhost
+      MINIO_TEST_PORT: "9000"
+      MINIO_TEST_ACCESS_KEY: poslatr-dev
+      MINIO_TEST_SECRET_KEY: poslatr-dev-secret-change-me
+      MINIO_TEST_BUCKET: poslatr-media
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -43,6 +48,31 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+
+      # MinIO as an explicit background container: the `server` subcommand and
+      # bucket bootstrap are awkward to express as a GitHub service, so run it
+      # directly and wait for health. Feeds the ISS-006 media integration tests.
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER=poslatr-dev \
+            -e MINIO_ROOT_PASSWORD=poslatr-dev-secret-change-me \
+            minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+          echo "waiting for MinIO to be ready..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:9000/minio/health/live >/dev/null; then
+              echo "MinIO is ready"; break
+            fi
+            sleep 2
+          done
+          # Bootstrap a private bucket with the mc client (denies anonymous access).
+          docker run --rm --network host \
+            --entrypoint sh minio/mc:RELEASE.2025-08-13T08-35-41Z -c "
+              mc alias set local http://localhost:9000 poslatr-dev poslatr-dev-secret-change-me &&
+              mc mb --ignore-existing local/poslatr-media &&
+              mc anonymous set none local/poslatr-media
+            "
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

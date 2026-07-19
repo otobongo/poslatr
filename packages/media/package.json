@@ -12,8 +12,16 @@
   },
   "devDependencies": {
     "@poslatr/config": "workspace:*",
+    "@types/node": "26.1.1",
+    "drizzle-orm": "0.45.2",
     "typescript": "5.9.3",
-    "vitest": "4.1.10",
-    "@types/node": "26.1.1"
+    "vitest": "4.1.10"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1090.0",
+    "@aws-sdk/s3-request-presigner": "3.1090.0",
+    "@poslatr/core": "workspace:*",
+    "@poslatr/db": "workspace:*",
+    "sharp": "0.35.3"
   }
 }

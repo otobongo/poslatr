@@ -21,6 +21,14 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+  // Signed GET URL lifetime (SECURITY.md 2.19: short-TTL, 15 min default).
+  MEDIA_SIGNED_URL_TTL_SECONDS: z.coerce.number().int().positive().max(3600).default(900),
+  // Hard ceiling enforced before a presigned PUT is issued.
+  MEDIA_MAX_UPLOAD_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(25 * 1024 * 1024),
   // Per-provider feature gating (PRD 3.2), as data not code: provider ids
   // appear only as runtime values here, never in a conditional, which is what
   // keeps the provider-agnosticism grep clean by construction.

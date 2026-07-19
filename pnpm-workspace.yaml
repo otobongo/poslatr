@@ -11,3 +11,9 @@ packages:
 overrides:
   postcss: ">=8.5.10"
   esbuild: ">=0.25.0"
+
+# sharp ships prebuilt platform binaries via @img/sharp-* optional deps and
+# needs no build step, but pnpm blocks its install script by default; allow it
+# explicitly so a frozen-lockfile CI install is deterministic.
+onlyBuiltDependencies:
+  - sharp
