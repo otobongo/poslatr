@@ -30,8 +30,24 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
+      # Redis 7 for the ISS-007 scheduler tests (BullMQ queues, two-worker
+      # exactly-once, delayed jobs). They skip without REDIS_URL.
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     env:
       DATABASE_URL: postgres://poslatr:poslatr@localhost:5432/poslatr
+      # The worker scheduler suite uses its own DB so its connection/credential
+      # fixtures don't contend with the vault suite's global psl_credentials ops.
+      WORKER_DATABASE_URL: postgres://poslatr:poslatr@localhost:5432/poslatr_worker
+      REDIS_URL: redis://localhost:6379
       MINIO_TEST_ENDPOINT: localhost
       MINIO_TEST_PORT: "9000"
       MINIO_TEST_ACCESS_KEY: poslatr-dev
@@ -99,6 +115,12 @@ jobs:
 
       - name: Migrate database
         run: pnpm --filter @poslatr/db db:migrate
+
+      - name: Create and migrate the worker test database
+        run: |
+          PGPASSWORD=poslatr psql -h localhost -U poslatr -d postgres \
+            -c "CREATE DATABASE poslatr_worker OWNER poslatr;"
+          DATABASE_URL="$WORKER_DATABASE_URL" pnpm --filter @poslatr/db db:migrate
 
       - name: Test
         run: pnpm test

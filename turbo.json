@@ -12,6 +12,8 @@
       // is exactly how a skipped-not-run suite masquerades as passing.
       "env": [
         "DATABASE_URL",
+        "WORKER_DATABASE_URL",
+        "REDIS_URL",
         "MINIO_TEST_ENDPOINT",
         "MINIO_TEST_PORT",
         "MINIO_TEST_SSL",

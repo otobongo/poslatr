@@ -44,7 +44,9 @@ export {
   incrementAttemptCount,
   reclaimAllStalePostTargets,
   reclaimStalePostTarget,
+  recordPublishFailure,
   recordPublishSuccess,
+  releasePublishingClaim,
   recordPublishSuccessOrThrow,
   transitionPostTargetStatus,
   transitionPostTargetStatusOrThrow,
@@ -79,3 +81,23 @@ export {
   type CreateMediaAssetInput,
   type MediaAssetRow,
 } from './repositories/media-assets.js';
+
+export {
+  findConnectionById,
+  setConnectionHealth,
+  type ConnectionHealth,
+  type ConnectionRow,
+} from './repositories/connections.js';
+
+export {
+  createDeadLetterInput,
+  findDeadLettersForTarget,
+  writeDeadLetter,
+  type CreateDeadLetterInput,
+} from './repositories/dead-letters.js';
+
+export {
+  auditEventInput,
+  writeAuditEvent,
+  type AuditEventInput,
+} from './repositories/audit-events.js';

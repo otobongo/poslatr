@@ -316,3 +316,65 @@ export async function recordPublishSuccessOrThrow(
     throw new TransitionRaceLostError('post target', id, 'publishing');
   }
 }
+
+/**
+ * Releases a claim the current worker holds: `publishing -> scheduled`, gated on
+ * the row still being `publishing`, clearing the lease. Used when a retryable
+ * error means the worker is giving the target back for another attempt (the
+ * BullMQ retry re-claims from `scheduled`). Distinct from reclaimStalePostTarget,
+ * which is the sweeper path for a DEAD worker's expired lease; this is a live
+ * worker voluntarily releasing its own active claim.
+ *
+ * Returns rows updated (1 normally, 0 if the row already moved on).
+ */
+export async function releasePublishingClaim(
+  db: Executor,
+  workspaceId: string,
+  id: string,
+): Promise<number> {
+  const updated = await db
+    .update(postTargets)
+    .set({ status: 'scheduled', claimedAt: null, claimExpiresAt: null, updatedAt: new Date() })
+    .where(
+      and(
+        eq(postTargets.id, id),
+        eq(postTargets.workspaceId, workspaceId),
+        eq(postTargets.status, 'publishing'),
+      ),
+    )
+    .returning({ id: postTargets.id });
+  return updated.length;
+}
+
+/**
+ * Terminally fails a target: `publishing -> failed` in one gated statement,
+ * recording a user-safe message on lastError (never a stack trace or provider
+ * body; SECURITY.md 2.16). Returns rows updated (1 on success, 0 if the claim
+ * was already lost or resolved). Mirror of recordPublishSuccess.
+ */
+export async function recordPublishFailure(
+  db: Executor,
+  workspaceId: string,
+  id: string,
+  userMessage: string,
+): Promise<number> {
+  const now = new Date();
+  const updated = await db
+    .update(postTargets)
+    .set({
+      status: 'failed',
+      lastError: userMessage.slice(0, 500),
+      lastErrorAt: now,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(postTargets.id, id),
+        eq(postTargets.workspaceId, workspaceId),
+        eq(postTargets.status, 'publishing'),
+      ),
+    )
+    .returning({ id: postTargets.id });
+
+  return updated.length;
+}

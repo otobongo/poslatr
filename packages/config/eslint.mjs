@@ -15,7 +15,7 @@ export function createBaseConfig(tsconfigRootDir) {
           // eslint.config.mjs itself sits outside every tsconfig.json's include;
           // allowDefaultProject lets typescript-eslint lint it without type info.
           projectService: {
-            allowDefaultProject: ['eslint.config.mjs'],
+            allowDefaultProject: ['eslint.config.mjs', 'vitest.config.ts'],
           },
           tsconfigRootDir,
         },
