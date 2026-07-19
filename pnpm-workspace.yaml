@@ -1,0 +1,8 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# GHSA-qx2v-qp2m-jg93: next@16.2.10 pins postcss@8.4.31, which has a moderate
+# XSS advisory. Force the already-present patched version everywhere.
+overrides:
+  postcss: ">=8.5.10"
