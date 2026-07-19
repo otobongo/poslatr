@@ -65,8 +65,16 @@ const mediaArb = fc.record({
   durationMs: fc.option(fc.integer({ min: 1, max: 600_000 }), { nil: null }),
 });
 
+// Bias text so the property straddles common platform limits (ISS-005-F3):
+// most inputs are short, but a meaningful fraction run long enough to exercise
+// a provider's character-limit branch (Mastodon/Bluesky sit around 300-500).
+const textArb = fc.oneof(
+  { weight: 3, arbitrary: fc.string({ maxLength: 600 }) },
+  { weight: 1, arbitrary: fc.string({ minLength: 501, maxLength: 5000 }) },
+);
+
 const canonicalPostArb: fc.Arbitrary<CanonicalPost> = fc.record({
-  body: fc.record({ text: fc.string({ maxLength: 2000 }) }),
+  body: fc.record({ text: textArb }),
   media: fc.array(mediaArb, { maxLength: 8 }),
 });
 
@@ -92,8 +100,14 @@ export function checkCapabilityDeclaration(subject: ContractSubject): CheckResul
 
 /**
  * Check 2: validate() is pure (ISS-005 test case 3's target). Property-based
- * inputs; network spies on both the injected transport and global fetch; and a
- * determinism check (same input twice must yield identical results).
+ * inputs plus a determinism check (same input twice yields identical results).
+ *
+ * The injected transport is the sanctioned network path, and its spy is
+ * authoritative: the contract requires all provider I/O to go through it. The
+ * global-fetch spy is a best-effort secondary net (ISS-005-F1) that catches the
+ * naive `fetch()` call; a provider that captured a fetch reference before the
+ * swap would evade it, but such a provider still violates the transport-only
+ * contract and would be caught by review.
  */
 export async function checkValidatePurity(
   subject: ContractSubject,

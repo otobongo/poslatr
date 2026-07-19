@@ -17,6 +17,14 @@ export default [
                 'The vault must never be imported from the web app (PRD ISS-004). Decrypt only in the worker/API.',
             },
           ],
+          // Also block any future deep specifier (ISS-004-F3).
+          patterns: [
+            {
+              group: ['@poslatr/vault/*'],
+              message:
+                'The vault must never be imported from the web app (PRD ISS-004). Decrypt only in the worker/API.',
+            },
+          ],
         },
       ],
     },

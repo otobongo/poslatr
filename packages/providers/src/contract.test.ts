@@ -38,6 +38,20 @@ describe('FakeProvider passes the contract harness (PRD ISS-005)', () => {
     const result = await runAllContractChecks(fakeSubject);
     expect(result.ok).toBe(true);
   });
+
+  // ISS-005-F3: FakeProvider.validate must flag a post over its declared char
+  // limit. The purity property now generates such inputs; this pins the branch
+  // directly so the harness's coverage of it can't silently regress.
+  it('validate() flags a post exceeding the declared character limit', () => {
+    const provider = new FakeProvider({ transport: new (class {
+      request() {
+        return Promise.reject(new Error('unused'));
+      }
+    })() });
+    const result = provider.validate({ body: { text: 'x'.repeat(501) }, media: [] });
+    expect(result.ok).toBe(false);
+    expect(result.issues.some((i) => i.field === 'body.text')).toBe(true);
+  });
 });
 
 // ISS-005 test case 3: the harness must FAIL a deliberately broken provider.

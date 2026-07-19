@@ -54,10 +54,14 @@ jobs:
         run: pnpm lint
 
       # PRD 3.2: core code must never reference a provider id. Zero matches
-      # outside packages/providers is a hard gate.
+      # outside packages/providers is a hard gate. Case-insensitive, and the
+      # denylist grows as concrete providers land (ISS-005-F2). Comments are
+      # scanned too: a provider id has no business in core even in prose.
       - name: Provider-agnosticism check
         run: |
-          if grep -rn "mastodon" apps/ packages/core packages/db; then
+          # git grep scans only tracked source, so build output like .next/
+          # (which carries provider names in Next's bot list) can never trip it.
+          if git grep -niE "mastodon|bluesky|instagram|linkedin|facebook" -- apps/ packages/core packages/db; then
             echo "::error::provider id referenced outside packages/providers (PRD 3.2)"
             exit 1
           fi

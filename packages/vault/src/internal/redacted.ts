@@ -23,7 +23,9 @@ export class RedactedCredentials implements DecryptedCredentials {
   }
 
   reveal(): Record<string, unknown> {
-    return this.#data;
+    // Return a deep clone, not the live internal reference (ISS-004-F2): a
+    // caller mutating the result must not corrupt vault-internal state.
+    return structuredClone(this.#data);
   }
 
   toJSON(): never {
