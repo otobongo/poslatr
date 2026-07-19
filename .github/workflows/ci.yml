@@ -53,6 +53,16 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # PRD 3.2: core code must never reference a provider id. Zero matches
+      # outside packages/providers is a hard gate.
+      - name: Provider-agnosticism check
+        run: |
+          if grep -rn "mastodon" apps/ packages/core packages/db; then
+            echo "::error::provider id referenced outside packages/providers (PRD 3.2)"
+            exit 1
+          fi
+          echo "provider-agnosticism check clean"
+
       - name: Migrate database
         run: pnpm --filter @poslatr/db db:migrate
 

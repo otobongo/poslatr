@@ -23,6 +23,12 @@ export function createBaseConfig(tsconfigRootDir) {
       rules: {
         '@typescript-eslint/no-floating-promises': 'error',
         '@typescript-eslint/no-explicit-any': 'error',
+        // Interface implementations often ignore parameters; the leading
+        // underscore is the explicit "unused on purpose" marker.
+        '@typescript-eslint/no-unused-vars': [
+          'error',
+          { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' },
+        ],
       },
     },
   );
