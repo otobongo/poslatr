@@ -21,6 +21,18 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+  // Per-provider feature gating (PRD 3.2), as data not code: provider ids
+  // appear only as runtime values here, never in a conditional, which is what
+  // keeps the provider-agnosticism grep clean by construction.
+  ENABLED_PROVIDERS: z
+    .string()
+    .default('')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0),
+    ),
   VAULT_MASTER_KEY: vaultKey,
   // The version tag written on new encryptions. Bumped when rotating.
   VAULT_KEY_VERSION: z.coerce.number().int().min(1).default(1),
